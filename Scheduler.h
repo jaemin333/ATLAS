@@ -60,6 +60,16 @@ using namespace std;
 namespace ramulator
 {
 
+    struct ATLAS_Meta{
+        static const long THRESHOLD = 100000;
+        static const long QUANTUM = 10000000;
+        static constexpr double ALPHA = 0.875;
+        
+        static std::vector<double> total_as;
+        static std::vector<int> thread_rank; //낮을수록 우선
+        static long cycle_count_quantum;
+    };
+
 template <typename T>
 class Controller;
 
@@ -203,7 +213,36 @@ private:
 
             if (req1->arrive <= req2->arrive) return req1;
             return req2;}
+        [this] (ReqIter req1, ReqIter req2) {
+            //Rule 1: TH_Over-threshold-requests-first
+            bool over_th1 = (this->ctrl->clk - req1->arrive) > ATLAS_Meta::THRESHOLD;
+            bool over_th2 = (this->ctrl->clk - req2->arrive) > ATLAS_Meta::THRESHOLD;
+
+            if(over_th1 ^ over_th2){
+                if(over_th1) retuen req1;
+                return req2;
+            }
+
+            //Rule 2: LAS
+
+
+            //Rule 3: RH(row_hit_first)
+            bool hit1 = this->ctrl->is_ready(req1) && this->ctrl->is_row_hit(req1);
+            bool hit2 = this->ctrl->is_ready(req2) && this->ctrl->is_row_hit(req2);
+
+            if(hit1 ^ hit2){
+                if(hit1) return req1;
+                return req2;
+            }
+
+            //Rule 4: FCFS (Oldest-first)
+            if(req1->arrive <=req2->arrive) return req1;
+            return req2;
+
+
+        }
     };
+    
 };
 
 
