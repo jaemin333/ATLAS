@@ -50,6 +50,13 @@ Processor::Processor(const Config& configs,
             .precision(0)
             ;
   cpu_cycles = 0;
+
+  instruction_throughput
+        .name("instruction_throughput")
+        .desc("Instruction Throughput (Total Retired Instructions / CPU Cycles)")
+        .precision(6)
+        ;
+  instruction_throughput = 0;
 }
 
 void Processor::tick() {

@@ -125,6 +125,7 @@ public:
     bool has_reached_limit();
     long get_insts(); // the total number of instructions issued to all cores
 
+
     std::vector<std::unique_ptr<Core>> cores;
     std::vector<double> ipcs;
     double ipc = 0;
@@ -144,6 +145,17 @@ public:
     Cache llc;
 
     ScalarStat cpu_cycles;
+
+    ScalarStat instruction_throughput;
+
+    void calculate_throughput(){
+        long total_insts=0;
+        for(auto& core:cores){
+            total_insts += core->get_insts();
+        }
+
+        instruction_throughput =(double)total_insts / cpu_cycles.value();
+    }
 };
 
 }

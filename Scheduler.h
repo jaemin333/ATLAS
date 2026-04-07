@@ -81,9 +81,12 @@ public:
 
     enum class Type {
         FCFS, FRFCFS, FRFCFS_Cap, FRFCFS_PriorHit, ATLAS, MAX
-    } type = Type::FRFCFS_Cap; //Change this line to change scheduling policy
+    } type = Type::FCFS; //Change this line to change scheduling policy
 
     long cap = 16; //Change this line to change cap
+
+    std::map<int,int> local_as;
+    std::map<int, std::map<vector<int>, int>> bank_req_counts;
 
     Scheduler(Controller<T>* ctrl) : ctrl(ctrl) {}
 
@@ -212,18 +215,28 @@ private:
             }
 
             if (req1->arrive <= req2->arrive) return req1;
-            return req2;}
+            return req2;},
         [this] (ReqIter req1, ReqIter req2) {
             //Rule 1: TH_Over-threshold-requests-first
             bool over_th1 = (this->ctrl->clk - req1->arrive) > ATLAS_Meta::THRESHOLD;
             bool over_th2 = (this->ctrl->clk - req2->arrive) > ATLAS_Meta::THRESHOLD;
 
             if(over_th1 ^ over_th2){
-                if(over_th1) retuen req1;
+                if(over_th1) return req1;
                 return req2;
             }
 
             //Rule 2: LAS
+            int rank1=0, rank2 = 0;
+            if(req1->coreid < ATLAS_Meta::thread_rank.size())
+                rank1 = ATLAS_Meta::thread_rank[req1->coreid];
+            if(req2->coreid < ATLAS_Meta::thread_rank.size())
+                rank1 = ATLAS_Meta::thread_rank[req2->coreid];
+
+            if(rank1 != rank2){
+                if(rank1 < rank2) return req1;
+                return req2;
+            }
 
 
             //Rule 3: RH(row_hit_first)

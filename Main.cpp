@@ -28,11 +28,19 @@
 #include "TLDRAM.h"
 #include "STTMRAM.h"
 #include "PCM.h"
+#include "Scheduler.h"
+
 
 using namespace std;
 using namespace ramulator;
 
 bool ramulator::warmup_complete = false;
+
+namespace ramulator {
+    std::vector<double> ATLAS_Meta::total_as;
+    std::vector<int> ATLAS_Meta::thread_rank;
+    long ATLAS_Meta::cycle_count_quantum = 0;
+}
 
 template<typename T>
 void run_dramtrace(const Config& configs, Memory<T, Controller>& memory, const char* tracename) {
@@ -145,6 +153,9 @@ void run_cputrace(const Config& configs, Memory<T, Controller>& memory, const st
             memory.tick();
 
     }
+
+    proc.calculate_throughput();
+
     // This a workaround for statistics set only initially lost in the end
     memory.finish();
     Stats::statlist.printall();
@@ -220,6 +231,10 @@ int main(int argc, const char *argv[])
 
     std::vector<const char*> files(&argv[trace_start], &argv[argc]);
     configs.set_core_num(argc - trace_start);
+
+    int num_cores = configs.get_core_num();
+    ramulator::ATLAS_Meta::total_as.assign(num_cores, 0.0);
+    ramulator::ATLAS_Meta::thread_rank.assign(num_cores, 0);
 
     if (standard == "DDR3") {
       DDR3* ddr3 = new DDR3(configs["org"], configs["speed"]);

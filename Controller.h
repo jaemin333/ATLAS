@@ -336,6 +336,18 @@ public:
         read_req_queue_length_sum += readq.size() + pending.size();
         write_req_queue_length_sum += writeq.size();
 
+        
+        if (this->scheduler->type == Scheduler<T>::Type::ATLAS) {
+            for (auto const& core_it : this->scheduler->bank_req_counts) {
+                int coreid = core_it.first;
+                int active_bank_count = 0;
+                for (auto const& bank_it : core_it.second) {
+                    if (bank_it.second > 0) active_bank_count++;
+                }
+                this->scheduler->local_as[coreid] += active_bank_count;
+            }
+        }
+
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
             Request& req = pending[0];
@@ -345,6 +357,17 @@ public:
                   channel->update_serving_requests(
                       req.addr_vec.data(), -1, clk);
                 }
+                
+                //읽기 작업 완료
+                // =================================================================
+                if (this->scheduler->type == Scheduler<T>::Type::ATLAS) {
+                    auto begin = req.addr_vec.begin();
+                    auto end = begin + int(T::Level::Bank) + 1;
+                    vector<int> bank_addr(begin, end);
+                    this->scheduler->bank_req_counts[req.coreid][bank_addr]--;
+                }
+                // =================================================================
+
                 req.callback(req);
                 pending.pop_front();
             }
@@ -394,6 +417,16 @@ public:
         if (req->is_first_command) {
             req->is_first_command = false;
             int coreid = req->coreid;
+            
+            
+            //첫 명령어 발급 -> 해당 뱅크 점유 카운트 +1
+            if (this->scheduler->type == Scheduler<T>::Type::ATLAS) {
+                auto begin = req->addr_vec.begin();
+                auto end = begin + int(T::Level::Bank) + 1;
+                vector<int> bank_addr(begin, end);
+                this->scheduler->bank_req_counts[coreid][bank_addr]++;
+            }
+
             if (req->type == Request::Type::READ || req->type == Request::Type::WRITE) {
               channel->update_serving_requests(req->addr_vec.data(), 1, clk);
             }
@@ -430,14 +463,12 @@ public:
         issue_cmd(cmd, get_addr_vec(cmd, req));
 
         // check whether this is the last command (which finishes the request)
-        //if (cmd != channel->spec->translate[int(req->type)]){
         if (!(channel->spec->is_accessing(cmd) || channel->spec->is_refreshing(cmd))) {
             if(channel->spec->is_opening(cmd)) {
                 // promote the request that caused issuing activation to actq
                 actq.q.push_back(*req);
                 queue->q.erase(req);
             }
-
             return;
         }
 
@@ -448,6 +479,15 @@ public:
         }
 
         if (req->type == Request::Type::WRITE) {
+     
+            // 쓰기 작업 완료 -> 해당 뱅크 점유 카운트 -1
+            if (this->scheduler->type == Scheduler<T>::Type::ATLAS) {
+                auto begin = req->addr_vec.begin();
+                auto end = begin + int(T::Level::Bank) + 1;
+                vector<int> bank_addr(begin, end);
+                this->scheduler->bank_req_counts[req->coreid][bank_addr]--;
+            }
+            
             channel->update_serving_requests(req->addr_vec.data(), -1, clk);
             req->callback(*req);
         }

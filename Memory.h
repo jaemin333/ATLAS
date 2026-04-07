@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cassert>
 #include <tuple>
+#include <algorithm>
 
 using namespace std;
 
@@ -278,6 +279,7 @@ public:
       }
     }
 
+    //전체 시스템 사이클
     void tick()
     {
         ++num_dram_cycles;
@@ -300,6 +302,42 @@ public:
         }
         if (is_active) {
           ramulator_active_cycles++;
+        }
+
+        //ATLAS Rule 2 logic
+        if(ctrls.size() > 0 && ctrls[0]->scheduler->type == Scheduler<T>::Type::ATLAS){
+            ATLAS_Meta::cycle_count_quantum++;
+
+            if(ATLAS_Meta::cycle_count_quantum >= ATLAS_Meta::QUANTUM){
+                ATLAS_Meta::cycle_count_quantum = 0; // 퀀텀 타이머 리셋
+                int num_cores = ATLAS_Meta::total_as.size();
+
+                for(int i=0; i<num_cores; i++){
+                    double total_local_as_this_quantum  =0;
+
+                    for(auto ctrl : ctrls){
+                        total_local_as_this_quantum += ctrl->scheduler->local_as[i];
+                        ctrl->scheduler->local_as[i] = 0; 
+                    }
+                    ATLAS_Meta::total_as[i] = (ATLAS_Meta::ALPHA * ATLAS_Meta::total_as[i]) + 
+                                              ((1.0 - ATLAS_Meta::ALPHA) * total_local_as_this_quantum);
+
+                    std::vector<int> core_indices(num_cores);
+                    for (int i = 0; i < num_cores; ++i) {
+                        core_indices[i] = i;
+                    }
+                    
+                    std::sort(core_indices.begin(), core_indices.end(), [](int a, int b) {
+                    return ATLAS_Meta::total_as[a] < ATLAS_Meta::total_as[b];
+                    });
+
+                    for (int rank = 0; rank < num_cores; ++rank) {
+                        int coreid = core_indices[rank];
+                        ATLAS_Meta::thread_rank[coreid] = rank; // 0등부터 부여
+                    }
+                }
+            }
+
         }
     }
 
